@@ -69,18 +69,20 @@ def cached_fetch(query: str, limit: int = 200) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def cached_filter(df: pd.DataFrame, query: str) -> pd.DataFrame:
-    # Include query in cache key to ensure different queries get different filtered results
+def cached_filter(df: pd.DataFrame) -> pd.DataFrame:
+    # Filter once per DataFrame - query-aware filtering happens in extraction
     return filter_noise(df)
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, hash_funcs={pd.DataFrame: lambda x: id(x)})
 def cached_trends(df: pd.DataFrame, query: str) -> Dict[str, Dict[str, Any]]:
+    # Cache key uses DataFrame id + query string
     return extract_trends(df, query)
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, hash_funcs={dict: lambda x: id(x)})
 def cached_recos(trends: Dict[str, Dict[str, Any]], brand: str) -> Dict[str, Any]:
+    # Cache key uses trends dict id + brand
     return generate_recommendations(trends, brand)
 
 
@@ -184,7 +186,7 @@ if analyze:
             st.warning("No data found for this query. Try broadening it.")
 
         else:
-            df_filtered = cached_filter(df_raw, query or DEFAULT_QUERY)
+            df_filtered = cached_filter(df_raw)
 
             if df_filtered.empty:
                 st.warning("Data fetched, but no flavor-relevant posts after filtering.")
