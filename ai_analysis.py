@@ -164,9 +164,12 @@ def extract_trends(df: pd.DataFrame, query: str) -> Dict[str, Dict[str, Any]]:
     - Edge-case detection (small data, generic queries, conflicting trends) flags uncertain results
     """
     llm = get_llm()
-    if llm is None or df.empty:
-        logging.warning("Trend extraction: No LLM or empty DataFrame; skipping LLM trend extraction.")
+    if df.empty:
+        logging.warning("Trend extraction: Empty DataFrame; skipping trend extraction.")
         return {}
+    
+    if llm is None:
+        logging.warning("Trend extraction: No LLM available; will use deterministic fallback.")
 
     # === EDGE CASE: Very small dataset ===
     if len(df) < 10:
@@ -207,7 +210,9 @@ def extract_trends(df: pd.DataFrame, query: str) -> Dict[str, Dict[str, Any]]:
         "Return valid JSON only. No explanation."
     )
 
-    raw = _call_llm(llm, system_prompt, user_prompt)
+    raw = None
+    if llm is not None:
+        raw = _call_llm(llm, system_prompt, user_prompt)
     parsed = _safe_json_loads(raw)
 
     if not isinstance(parsed, dict):
@@ -264,11 +269,25 @@ def extract_trends(df: pd.DataFrame, query: str) -> Dict[str, Dict[str, Any]]:
         fallback = {}
         for text in df["text"]:
             t = text.lower()
-            for flavor in [
+            # Query-aware flavor extraction
+            query_flavors = set(query.lower().split())
+            
+            # Expanded flavor list for different queries
+            all_flavors = [
                 "kesar", "pista", "yuzu", "lavender",
                 "cherry cola", "cocoa", "chocolate",
-                "vanilla", "mango", "apple", "cinnamon"
-            ]:
+                "vanilla", "mango", "apple", "cinnamon",
+                "strawberry", "blueberry", "raspberry", "peach",
+                "orange", "lemon", "lime", "mint",
+                "coffee", "matcha", "caramel", "honey",
+                "almond", "walnut", "cashew", "pistachio"
+            ]
+            
+            # Prioritize query-mentioned flavors
+            priority_flavors = [f for f in all_flavors if any(word in f for word in query_flavors)]
+            search_flavors = priority_flavors if priority_flavors else all_flavors
+            
+            for flavor in search_flavors:
                 if flavor in t:
                     fallback.setdefault(flavor, {"freq": 0, "sentiment": 0.6})
                     fallback[flavor]["freq"] += 1
