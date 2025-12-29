@@ -13,7 +13,6 @@ TEMPERATURE = 0.3
 BATCH_SIZE = 20
 
 import os
-from openai import OpenAI
 
 
 def get_client():
