@@ -4,35 +4,31 @@ import os
 from typing import Any, Dict, Iterable, List, Optional
 
 import pandas as pd
-from groq import Groq
+from langchain_groq import ChatGroq
+from langchain_core.messages import HumanMessage, SystemMessage
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(message)s")
 
-MODEL_NAME = "llama-3.1-8b-instant"
+MODEL_NAME = "llama-3.1-70b-versatile"
 TEMPERATURE = 0.3
 BATCH_SIZE = 20
 
-import os
 
-
-def get_client():
+def get_llm():
     """
-    Returns an OpenAI-compatible client (Groq/OpenAI).
+    Returns a langchain-groq ChatGroq instance.
     Returns None if API key is missing.
     """
     groq_key = os.getenv("GROQ_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
     
     if groq_key:
-        # Use Groq with OpenAI-compatible client
-        return OpenAI(
-            api_key=groq_key,
-            base_url="https://api.groq.com/openai/v1"
+        return ChatGroq(
+            model=MODEL_NAME,
+            temperature=TEMPERATURE,
+            groq_api_key=groq_key
         )
-    elif openai_key:
-        return OpenAI(api_key=openai_key)
     else:
-        logging.warning("No API key found; using deterministic recommendations only.")
+        logging.warning("No GROQ_API_KEY found; using deterministic recommendations only.")
         return None
 
 
@@ -48,19 +44,16 @@ def _safe_json_loads(text: str) -> Any:
         return None
 
 
-def _call_llm(client: Groq, system_prompt: str, user_prompt: str) -> Optional[str]:
+def _call_llm(llm: ChatGroq, system_prompt: str, user_prompt: str) -> Optional[str]:
     try:
-        completion = client.chat.completions.create(
-            model=MODEL_NAME,
-            temperature=TEMPERATURE,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
-        return completion.choices[0].message.content
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ]
+        response = llm.invoke(messages)
+        return response.content
     except Exception as exc:
-        logging.error("Groq call failed: %s", exc)
+        logging.error("LLM call failed: %s", exc)
         return None
 
 
@@ -170,9 +163,9 @@ def extract_trends(df: pd.DataFrame, query: str) -> Dict[str, Dict[str, Any]]:
     - Query conditioning ensures trends are relevant to user's specific interest
     - Edge-case detection (small data, generic queries, conflicting trends) flags uncertain results
     """
-    client = get_client()
-    if client is None or df.empty:
-        logging.warning("Trend extraction: No client or empty DataFrame; skipping LLM trend extraction.")
+    llm = get_llm()
+    if llm is None or df.empty:
+        logging.warning("Trend extraction: No LLM or empty DataFrame; skipping LLM trend extraction.")
         return {}
 
     # === EDGE CASE: Very small dataset ===
@@ -214,7 +207,7 @@ def extract_trends(df: pd.DataFrame, query: str) -> Dict[str, Dict[str, Any]]:
         "Return valid JSON only. No explanation."
     )
 
-    raw = _call_llm(client, system_prompt, user_prompt)
+    raw = _call_llm(llm, system_prompt, user_prompt)
     parsed = _safe_json_loads(raw)
 
     if not isinstance(parsed, dict):
@@ -332,7 +325,7 @@ def generate_recommendations(
     - LLM explanation capped at 500 chars and prefixed with confidence level (HIGH/MEDIUM/EMERGING/CAUTION)
     - Edge-case detection (conflicting signals, low sentiment) flags uncertain recommendations
     """
-    client = get_client()
+    llm = get_llm()
 
     if not trends:
         logging.warning("Recommendation generation: No trends provided; returning empty recommendation.")
@@ -446,7 +439,7 @@ def generate_recommendations(
         else:
             explanation = f"{confidence_phrase} {top_flavor} – Multiple independent discussions show positive reception, indicating genuine demand and market opportunity."
 
-    if client is not None:
+    if llm is not None:
         logging.debug("Recommendation: Calling LLM to enhance explanation with business context.")
         
         system_prompt = (
@@ -471,7 +464,7 @@ def generate_recommendations(
             "Start with the confidence level (high/medium/emerging/low consumer consensus)."
         )
 
-        raw = _call_llm(client, system_prompt, user_prompt)
+        raw = _call_llm(llm, system_prompt, user_prompt)
         if isinstance(raw, str) and raw.strip():
             # Validate LLM output is reasonable length (prevent injections)
             if len(raw.strip()) <= 500:

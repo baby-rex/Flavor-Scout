@@ -69,7 +69,8 @@ def cached_fetch(query: str, limit: int = 200) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
-def cached_filter(df: pd.DataFrame) -> pd.DataFrame:
+def cached_filter(df: pd.DataFrame, query: str) -> pd.DataFrame:
+    # Include query in cache key to ensure different queries get different filtered results
     return filter_noise(df)
 
 
@@ -183,7 +184,7 @@ if analyze:
             st.warning("No data found for this query. Try broadening it.")
 
         else:
-            df_filtered = cached_filter(df_raw)
+            df_filtered = cached_filter(df_raw, query or DEFAULT_QUERY)
 
             if df_filtered.empty:
                 st.warning("Data fetched, but no flavor-relevant posts after filtering.")
