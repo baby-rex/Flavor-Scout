@@ -125,11 +125,10 @@ with st.sidebar:
 # -------------------------
 def render_wordcloud(trends: Dict[str, Dict[str, Any]], top_n: int = 15):
     """
-    Render frequency-weighted wordcloud of trending flavors.
+    Render bar chart of trending flavors.
     
-    Why wordcloud? Visual encoding of frequency makes trends intuitive at a glance.
-    Executives can instantly see dominant flavors without reading tables.
-    Fallback to chart if wordcloud rendering fails (robust for edge cases).
+    Why bar chart? Clear visualization of frequency with exact values.
+    Easier to compare flavor mentions and identify trends at a glance.
     """
     freqs_full = {
         k: max(v.get("freq", 1), 1)
@@ -144,29 +143,26 @@ def render_wordcloud(trends: Dict[str, Dict[str, Any]], top_n: int = 15):
         st.info("No trend terms available to render.")
         return
 
-    try:
-        wc = WordCloud(
-            width=900,
-            height=400,
-            background_color="white"
-        ).generate_from_frequencies(freqs)
-
-        st.image(
-            wc.to_array(),
-            caption=f"Top {len(freqs)} trending flavors from {len(trends)} unique mentions",
-            use_column_width=True,
-        )
-
-    except Exception as exc:
-        logging.error("Wordcloud failed: %s", exc)
-        fig, ax = plt.subplots(figsize=(10, 4))
-        labels, values = zip(*freqs_items)
-        ax.bar(labels, values, color="#ff9800")
-        ax.set_xticks(range(len(labels)))
-        ax.set_xticklabels(labels, rotation=45, ha="right")
-        ax.set_ylabel("Mentions")
-        ax.set_title("Trend Wall (fallback)")
-        st.pyplot(fig)
+    # Render bar chart as primary visualization
+    fig, ax = plt.subplots(figsize=(12, 5))
+    labels, values = zip(*freqs_items)
+    bars = ax.bar(labels, values, color="#ff9800", edgecolor="#333", linewidth=1.5)
+    
+    # Add value labels on bars
+    for bar in bars:
+        height = bar.get_height()
+        ax.text(bar.get_x() + bar.get_width()/2., height,
+                f'{int(height)}',
+                ha='center', va='bottom', fontsize=10, fontweight='bold')
+    
+    ax.set_xlabel("Flavors", fontsize=12, fontweight='bold')
+    ax.set_ylabel("Mentions", fontsize=12, fontweight='bold')
+    ax.set_title(f"Top {len(freqs)} Trending Flavors", fontsize=14, fontweight='bold')
+    ax.set_xticklabels(labels, rotation=45, ha="right")
+    ax.grid(axis='y', alpha=0.3, linestyle='--')
+    
+    plt.tight_layout()
+    st.pyplot(fig)
 
 
 # -------------------------
