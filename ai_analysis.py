@@ -266,31 +266,42 @@ def extract_trends(df: pd.DataFrame, query: str) -> Dict[str, Dict[str, Any]]:
     # Only use fallback if LLM extraction completely failed
     if not validated:
         logging.info("Trend extraction: Query-conditioned search returned no results; using deterministic fallback.")
+        
+        # Expanded flavor list for different queries
+        all_flavors = [
+            "kesar", "pista", "yuzu", "lavender",
+            "cherry cola", "cocoa", "chocolate",
+            "vanilla", "mango", "apple", "cinnamon",
+            "strawberry", "blueberry", "raspberry", "peach",
+            "orange", "lemon", "lime", "mint",
+            "coffee", "matcha", "caramel", "honey",
+            "almond", "walnut", "cashew", "pistachio"
+        ]
+        
+        # Query-aware flavor extraction
+        query_flavors = set(query.lower().split())
+        priority_flavors = [f for f in all_flavors if any(word in f for word in query_flavors)]
+        
+        # Try priority flavors first; if none found, search all flavors
         fallback = {}
+        search_flavors = priority_flavors if priority_flavors else all_flavors
+        
         for text in df["text"]:
             t = text.lower()
-            # Query-aware flavor extraction
-            query_flavors = set(query.lower().split())
-            
-            # Expanded flavor list for different queries
-            all_flavors = [
-                "kesar", "pista", "yuzu", "lavender",
-                "cherry cola", "cocoa", "chocolate",
-                "vanilla", "mango", "apple", "cinnamon",
-                "strawberry", "blueberry", "raspberry", "peach",
-                "orange", "lemon", "lime", "mint",
-                "coffee", "matcha", "caramel", "honey",
-                "almond", "walnut", "cashew", "pistachio"
-            ]
-            
-            # Prioritize query-mentioned flavors
-            priority_flavors = [f for f in all_flavors if any(word in f for word in query_flavors)]
-            search_flavors = priority_flavors if priority_flavors else all_flavors
-            
             for flavor in search_flavors:
                 if flavor in t:
                     fallback.setdefault(flavor, {"freq": 0, "sentiment": 0.6})
                     fallback[flavor]["freq"] += 1
+        
+        # If priority search gave 0 results, fallback to searching all flavors
+        if not fallback and priority_flavors:
+            logging.info("Fallback: Priority flavors found 0 matches; searching all flavors...")
+            for text in df["text"]:
+                t = text.lower()
+                for flavor in all_flavors:
+                    if flavor in t:
+                        fallback.setdefault(flavor, {"freq": 0, "sentiment": 0.6})
+                        fallback[flavor]["freq"] += 1
 
         # Add confidence to fallback flavors
         for flavor in fallback:
